@@ -6,8 +6,8 @@ class Group:
     def __init__(self, group_name):
         self.name = group_name
         self.members_list = []
-        self.multicast_addr = self.generate_multicast_addr()
-        self.multicast_port = self.generate_multicast_port()
+        # self.multicast_addr = self.generate_multicast_addr()
+        # self.multicast_port = self.generate_multicast_port()
 
     # add a specific member to the group
     def add_member(self, member):
@@ -27,6 +27,7 @@ class Group:
         users.rstrip(',')
         return users
 
+    '''
     # auto-generate a random multicast address from the range
     # 224.0.0.0 - 224.255.255.255
     @staticmethod
@@ -40,3 +41,4 @@ class Group:
     def generate_multicast_port():
         port = random.randint(10000, 50000)
         return port
+    '''

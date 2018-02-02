@@ -3,8 +3,8 @@ import sys
 import re
 import select
 
-my_port = 8852
-server_p = 52237
+my_port = 8853
+server_p = 50000
 port_udp = 9994
 send_port = 9995
 
@@ -73,7 +73,7 @@ class Client:
     def exit_group(self, server_ip, server_port, message):
         tokens = message.split()
         formatted_message = "\t".join((str(self.id),tokens[0],tokens[1]))
-        reply = self.send_to_server(formatsted_message,server_ip, server_port)
+        reply = self.send_to_server(formatted_message,server_ip, server_port)
         status = reply
         print status
 
@@ -146,4 +146,4 @@ def get_ip():
 
 ip_ad = get_ip()
 c = Client(ip_ad)
-c.register_and_run(ip_ad, server_p)
+c.register_and_run("127.0.0.1", server_p)

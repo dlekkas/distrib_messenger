@@ -1,7 +1,9 @@
 import socket
 import select
-import member
-import group
+import sys
+
+from group import Group
+from member import Member
 
 
 class Tracker:
@@ -29,7 +31,6 @@ class Tracker:
         self.socket.setblocking(0)
         self.socket.bind((self.host, self.port))
         self.socket.listen(self.max_listen)
-
         self.sockets_list.append(self.socket)
 
         print 'Chat server started listening on port ' + str(self.port)
@@ -57,49 +58,94 @@ class Tracker:
 
     def handle_request(self, socket):
         message = socket.recv(4096)
-        print message
         if message:
+            # debug message to print the message sent by a specific client
             print 'Client [' + str(socket.getpeername()) + '] sent "' + str(message) + '"'
 
             # if  message starts with 'register' word then a client
             # wants to register to our service
             if message[0:8] == 'register':
                 self.client_register(socket, message)
-            #  a client command is issued
+
+            # a client command is issued by a specific member
             else:
+                # commands start with the requesting member's ID
+                # and they are tab ('\t') delimited
                 command = message.split("\t")
+                member_id = command[0]
+                if member_id in self.members_dict.keys():
+                    member = self.members_dict[member_id]
+                else:
+                    print 'Invalid member ID issued command'
+                    sys.exit(1)
+
+                # command "!q" informs the tracker that the member
+                # that issued the command want to quit
                 if command[1] == '!q':
-                    # user's ID is expected as first argument of the message
-                    member_id = command[0]
-                    self.member_quit(member_id, socket)
+                    self.member_quit(member, socket)
+
+                # command "!lg", user requests the list of all active groups
                 elif command[1] == '!lg':
-                    self.list_groups(socket)
+                    self.send_message(socket, self.list_groups())
+
+                # command "!j <group-name>", user requests from tracker
+                # to participate in the specified group
+                elif command[1] == '!j':
+                    self.join_group(member, command[2])
+
+                # command "!lm <group-name>", user requests the list of all
+                # active members in the specified group
+                elif command[1] == '!lm':
+                    group = self.groups[command[2]]
+                    self.send_message(socket, group.list_members())
+
+                # command "!e <group-name>", user requests to leave from
+                # the specified group
+                elif command[1] == '!e':
+                    group_name = command[2]
+                    self.leave_group(member, group_name)
+
+                else:
+                    print 'Unrecognised command request'
+                    sys.exit(2)
 
 
-    def list_groups(self, socket):
+
+    def list_groups(self):
         active_groups = ""
-        for group in self.groups:
-            group_name = group[0]
+        for group_name in self.groups.keys():
             active_groups = active_groups + '[' + group_name + '], '
-
         # remove extra comma at the end of the active groups list
         active_groups.rstrip(',')
-        # respond to client's request by sending the active groups
-        self.send_message(socket, active_groups)
 
 
-    def member_quit(self, member_id, socket):
-        if socket in self.sockets_list:
-            self.sockets_list.remove(socket)
-            socket.close()
-        # member object that wants to quit
-        member = self.members_dict[member_id]
-        # TODO - remove member from each group
+    # member quits the application
+    def member_quit(self, member, socket):
+        # remove member from every group that it belongs
+        for group in self.groups.values():
+            if member in group:
+                group.remove_member(member)
+        # remove member from the dictionary that tracker keeps
+        # for all of the connected members
+        del self.members_dict[member.id]
 
 
-    def join_group(self, client, group, socket):
-        # TODO - return multicast_ip and multicast port tab delimited to client
-        pass
+    # add a new member to the requested group
+    def join_group(self, member, group_name):
+        # if the group name the user requested to join doesn't exist
+        # then create a new group with that name
+        if group_name not in self.groups:
+            new_group = Group(group_name)
+            self.groups[group_name] = new_group
+        # add the requesting member to the group he requested
+        self.groups[group_name].add_member(member)
+
+
+    # remove a member from a group
+    def leave_group(self, member, group_name):
+        if group_name in self.groups.keys():
+            group = self.groups[group_name]
+        group.remove_member(member)
 
 
     # handle the new member registration by creating a new member
@@ -113,7 +159,7 @@ class Tracker:
         # generate a unique ID for each client
         client_id = str(hash(client_username + hash_salt))
         # create a member object for the new member
-        new_member = member.Member(client_id, client_username, client_ip, client_port)
+        new_member = Member(client_id, client_username, client_ip, client_port)
         # add a dictionary entry for each client based on his unique ID
         self.members_dict[client_id] = new_member
         self.send_message(socket, new_member.id)
@@ -127,8 +173,9 @@ class Tracker:
         socket.close()
 
 
-server = Tracker(host="192.168.1.22",port=52237)
+server = Tracker(host="127.0.0.1", port=50000)
 server.connect()
+
 
 
 
