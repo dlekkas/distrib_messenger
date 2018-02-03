@@ -3,10 +3,10 @@ import sys
 import re
 import select
 
-my_port = 8853
+my_port = 28773
 server_p = 50000
-port_udp = 9994
-send_port = 9995
+port_udp = 9999
+send_port = 9998
 
 
 class Client:
@@ -65,6 +65,7 @@ class Client:
         tokens = message.split()
         formatted_message = "\t".join((str(self.id), tokens[0], tokens[1]))
         reply = self.send_to_server(formatted_message ,server_ip, server_port)
+        print reply
         data = reply.split("\t")
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.bind((data[0], data[1]))
@@ -87,7 +88,7 @@ class Client:
     def send_to_server(self, message, server_ip, server_port):
 
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.bind((self.ip, self.tcp_port))
+        #s.bind((self.ip, self.tcp_port))
         s.connect((server_ip, server_port))
         s.send(message)
 
@@ -114,7 +115,7 @@ class Client:
         except socket.error:
             print "timeout bitch"
             self.udp_socket.shutdown(socket.SHUT_RDWR)
-            self.close()
+            #self.close()
 
         # self.udp_socket.sendto(message, address)
         print "sent data"
@@ -145,5 +146,5 @@ def get_ip():
 
 
 ip_ad = get_ip()
-c = Client(ip_ad)
+c = Client()
 c.register_and_run("127.0.0.1", server_p)
