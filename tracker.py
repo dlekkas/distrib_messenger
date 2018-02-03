@@ -1,10 +1,17 @@
 import socket
 import select
-import sys
+import logging
 
 from group import Group
 from member import Member
 
+
+# Configure a custom logger for debugging purposes
+logging.basicConfig(
+        filename='tracker.log',
+        format='%(asctime)s %(levelname)-8s %(message)s',
+        level=logging.DEBUG,
+        datefmt='%d-%m-%Y %H:%M:%S')
 
 class Tracker:
 
@@ -33,6 +40,7 @@ class Tracker:
         self.socket.listen(self.max_listen)
         self.sockets_list.append(self.socket)
 
+
         print 'Chat server started listening on port ' + str(self.port)
 
         while True:
@@ -52,6 +60,7 @@ class Tracker:
         # set the client socket to not block
         sockfd.setblocking(0)
         self.sockets_list.append(sockfd)
+        logging.debug('TCP connection with client [' + str(addr) + '] established successfully.')
         print 'Client [' + str(addr) + '] connected successfully!'
 
 
@@ -59,6 +68,7 @@ class Tracker:
         message = socket.recv(4096)
         if message:
             # debug message to print the message sent by a specific client
+            logging.info('Client [' + str(socket.getpeername()) + '] issued command "' + str(message) + '"')
             print 'Client [' + str(socket.getpeername()) + '] issued command "' + str(message) + '"'
 
             # if  message starts with 'register' word then a client
@@ -76,7 +86,7 @@ class Tracker:
                     member = self.members_dict[member_id]
                 else:
                     print 'Invalid member ID issued command'
-                    sys.exit(1)
+                    #sys.exit(1)
 
                 # command "!q" informs the tracker that the member
                 # that issued the command want to quit
@@ -99,7 +109,7 @@ class Tracker:
                 # active members in the specified group
                 elif command[1] == '!lm':
                     group = self.groups[command[2]]
-                    self.send_message(socket, group.list_members)
+                    self.send_message(socket, group.list_members())
 
                 # command "!e <group-name>", user requests to leave from
                 # the specified group
@@ -109,8 +119,8 @@ class Tracker:
 
                 else:
                     print 'Unrecognised command request'
-                    sys.exit(2)
-
+                    logging.warning('Unrecognised command request')
+                    return
 
 
     def list_groups(self):
@@ -174,8 +184,11 @@ class Tracker:
     # and terminates the TCP connection to ensure resources preservation
     def send_message(self, socket, message):
         socket.send(message)
+        addr = socket.getpeername()
         self.sockets_list.remove(socket)
+        logging.info('Tracker sent "' + message + '" to client [' + str(addr) + '].')
         socket.close()
+        logging.debug('TCP connection with client [' + str(addr) + '] terminated successfully.')
 
 
 server = Tracker(host="127.0.0.1", port=50000)
