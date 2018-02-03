@@ -43,7 +43,6 @@ class Tracker:
                     self.serve_client()
                 # command issued by member
                 else:
-                    print 'Handling request ...'
                     self.handle_request(sock)
 
 
@@ -53,14 +52,14 @@ class Tracker:
         # set the client socket to not block
         sockfd.setblocking(0)
         self.sockets_list.append(sockfd)
-        print 'Client' + str(addr) + 'connected successfully!'
+        print 'Client [' + str(addr) + '] connected successfully!'
 
 
     def handle_request(self, socket):
         message = socket.recv(4096)
         if message:
             # debug message to print the message sent by a specific client
-            print 'Client [' + str(socket.getpeername()) + '] sent "' + str(message) + '"'
+            print 'Client [' + str(socket.getpeername()) + '] issued command "' + str(message) + '"'
 
             # if  message starts with 'register' word then a client
             # wants to register to our service
@@ -70,7 +69,7 @@ class Tracker:
             # a client command is issued by a specific member
             else:
                 # commands start with the requesting member's ID
-                # and they are tab ('\t') delimited
+                # and they are tab delimited
                 command = message.split("\t")
                 member_id = command[0]
                 if member_id in self.members_dict.keys():
@@ -83,6 +82,7 @@ class Tracker:
                 # that issued the command want to quit
                 if command[1] == '!q':
                     self.member_quit(member, socket)
+                    self.send_message(socket, "QUIT OK")
 
                 # command "!lg", user requests the list of all active groups
                 elif command[1] == '!lg':
@@ -91,19 +91,21 @@ class Tracker:
                 # command "!j <group-name>", user requests from tracker
                 # to participate in the specified group
                 elif command[1] == '!j':
-                    self.join_group(member, command[2])
-
+                    group = self.join_group(member, command[2])
+                    reply = "\t".join([str(member) for member in group.members_list])
+                    self.send_message(socket, reply)
+                
                 # command "!lm <group-name>", user requests the list of all
                 # active members in the specified group
                 elif command[1] == '!lm':
                     group = self.groups[command[2]]
-                    self.send_message(socket, group.list_members())
+                    self.send_message(socket, group.list_members)
 
                 # command "!e <group-name>", user requests to leave from
                 # the specified group
                 elif command[1] == '!e':
-                    group_name = command[2]
-                    self.leave_group(member, group_name)
+                    self.leave_group(member, command[2])
+                    self.send_message(socket, "EXIT_GROUP OK")
 
                 else:
                     print 'Unrecognised command request'
@@ -112,18 +114,15 @@ class Tracker:
 
 
     def list_groups(self):
-        active_groups = ""
-        for group_name in self.groups.keys():
-            active_groups = active_groups + '[' + group_name + '], '
-        # remove extra comma at the end of the active groups list
-        active_groups.rstrip(',')
+        active_groups = ", ".join(["[%s]" % group_name for group_name in self.groups.keys()])
+        return active_groups
 
 
     # member quits the application
     def member_quit(self, member, socket):
         # remove member from every group that it belongs
         for group in self.groups.values():
-            if member in group:
+            if member in group.members_list:
                 group.remove_member(member)
         # remove member from the dictionary that tracker keeps
         # for all of the connected members
@@ -139,29 +138,35 @@ class Tracker:
             self.groups[group_name] = new_group
         # add the requesting member to the group he requested
         self.groups[group_name].add_member(member)
+        return self.groups[group_name]
 
 
     # remove a member from a group
     def leave_group(self, member, group_name):
         if group_name in self.groups.keys():
             group = self.groups[group_name]
-        group.remove_member(member)
+            group.remove_member(member)
 
 
     # handle the new member registration by creating a new member
     # entry and by generating a unique ID for the new member
     def client_register(self, socket, message):
-        hash_salt = "%SALT%"
         register_info = message.split('\t')
         client_ip = register_info[1]
         client_port = register_info[2]
         client_username = register_info[3]
+        # check if an active member already uses that username
+        for member in self.members_dict.values():
+            if member.username == client_username:
+                self.send_message(socket, "username taken")
+                return
         # generate a unique ID for each client
-        client_id = str(hash(client_username + hash_salt))
+        client_id = str(hash(client_username))
         # create a member object for the new member
         new_member = Member(client_id, client_username, client_ip, client_port)
-        # add a dictionary entry for each client based on his unique ID
+        # add a dictionary entry for new member based on his unique ID
         self.members_dict[client_id] = new_member
+        # send the unique ID to the client
         self.send_message(socket, new_member.id)
 
 
