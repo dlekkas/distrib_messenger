@@ -1,4 +1,3 @@
-import random
 
 
 class Group:
@@ -20,14 +19,10 @@ class Group:
 
     # list all the active members of the group
     def list_members(self):
-        users = ""
-        for member in self.members_list:
-            users = users + '(' + str(member.username) + '), '
-        # remove extra comma at the end of the active groups list
-        users.rstrip(',')
+        users = ", ".join(["(%s)" % member.username for member in self.members_list])
         return users
 
-    '''
+    '''    
     # auto-generate a random multicast address from the range
     # 224.0.0.0 - 224.255.255.255
     @staticmethod
