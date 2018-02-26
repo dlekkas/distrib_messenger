@@ -5,8 +5,6 @@ class Group:
     def __init__(self, group_name):
         self.name = group_name
         self.members_list = []
-        # self.multicast_addr = self.generate_multicast_addr()
-        # self.multicast_port = self.generate_multicast_port()
 
     # add a specific member to the group
     def add_member(self, member):
@@ -15,14 +13,26 @@ class Group:
 
     # remove a member from the group
     def remove_member(self, member):
-        self.members_list.remove(member)
+        if member in self.members_list:
+            self.members_list.remove(member)
+
+    # remove a member given its username
+    def remove_member_by_name(self, username):
+        for member in self.members_list:
+            if member.username == username:
+                self.members_list.remove(member)
 
     # list all the active members of the group
     def list_members(self):
-        users = ", ".join(["(%s)" % member.username for member in self.members_list])
-        return users
+        if not self.members_list:
+            return ""
+        else:
+            users = ", ".join(["(%s)" % member.username for member in self.members_list])
+            return users
 
     '''    
+    # optional multicast implementation
+    
     # auto-generate a random multicast address from the range
     # 224.0.0.0 - 224.255.255.255
     @staticmethod
