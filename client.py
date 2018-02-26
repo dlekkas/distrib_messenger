@@ -5,6 +5,7 @@ import select
 
 from member import Member
 from group import Group
+from message import Message
 
 
 class Client:
@@ -15,6 +16,13 @@ class Client:
         self.tcp_socket = None
         self.group_list = {}
         self.current_group = None
+        # serial number of message sent by client
+        self.message_num = 0
+        # lamport vector implementation for FIFO ordering implemented as a dictionary
+        # with key = <(username, group_name)> and value = <message-serial-no>
+        self.lamport_dict = {}
+        # buffer storing messages waiting to be delivered
+        self.messages_buffer = []
 
 
     def register(self, server_ip, server_port):
@@ -50,7 +58,7 @@ class Client:
                 self.member.id = reply
                 self.member.username = username
 
-        print "Successfully registered to distributed messenger"
+        print "Successfully registered to messenger application!"
         self.run(server_ip, server_port)
 
 
@@ -77,14 +85,14 @@ class Client:
                     elif sock == self.udp_socket:
                         sock.settimeout(5)
                         try:
-                            message = sock.recv(4096)
+                            received_msg = sock.recv(4096)
                         except socket.error:
                             print "Timeout Happened"
                             sock.shutdown(socket.SHUT_RDWR)
                             sock.close()
                             sys.exit(0)
-                        sys.stdout.write('\r%s' % message)
-                        sys.stdout.write('[%s] > ' % self.member.username)
+                        self.handle_incoming_message(received_msg)
+
 
                     # the TCP socket is listening for server to notify asynchronously that
                     # a member has entered or left a group that the client belongs to
@@ -220,35 +228,114 @@ class Client:
                 sys.exit(2)
 
 
+    # check incoming message and ensure that the message is not delivered
+    # unless it ensures FIFO ordering, if the message should not be
+    # delivered then it is stored in the associated buffer according to
+    # its group
+    def handle_incoming_message(self, received_msg):
+        # each message received should be in the following form
+        # <message-number> in <group-name> <username> says:: <message-content>
+        message = self.parse_incoming_message(received_msg)
+
+        # tuple associated with the incoming message (username,group_name)
+        tup = (message.username, message.group_name)
+
+        # if it is the first message received from this client then we should
+        # initialize this (user,group) tuple's with a serial number of zero
+        if tup not in self.lamport_dict.keys():
+            self.lamport_dict[tup] = 0
+
+        # serial number received by this message's (user,group) tuple
+        last_serial = self.lamport_dict[tup]
+
+        # if the serial number of the message received is the expected i.e the serial
+        # number we have last received by this message's (user,group) tuple then
+        # we accept the message and deliver it to the application (print to stdout)
+        if message.serial_no == last_serial + 1:
+            self.print_message(message)
+            # increment serial number of this (group,username) tuple's
+            self.lamport_dict[tup] = self.lamport_dict[tup] + 1
+            # check if there are any messages in the buffer waiting for the recently
+            # received message to be delivered and cascade deliver those messages
+            updates_available = True
+            while updates_available:
+                for waiting_msg in self.messages_buffer:
+                    if ((waiting_msg.username, waiting_msg.group_name) == tup) and \
+                            (waiting_msg.serial_no == message.serial_no + 1):
+                        self.print_message(waiting_msg)
+                        self.messages_buffer.remove(waiting_msg)
+                        continue
+                updates_available = False
+
+        # if the serial number of the message received is greater than the expected
+        # then the message should be appended to the buffer
+        elif message.serial_no > last_serial + 1:
+            self.messages_buffer.append(message)
+
+        # if the serial number of the message received is less than the expected
+        # then the message should be rejected
+        else:
+            sys.stderr.write('A message is rejected due to smaller serial_no than expected')
+
+
+
+    # parse incoming message to extract important information
+    # in order to implement a message ordering scheme
+    def parse_incoming_message(self, received_msg):
+        # each message received should be in the following form
+        # <message-number> in <group-name> <username> says:: <message-content>
+        tokens = received_msg.split()
+        message_serial = int(tokens[0])
+        group_name = tokens[2]
+        username = tokens[3]
+        message_content = ' '.join(tokens[5:])
+        message = Message(message_content, group_name, username, message_serial)
+        return message
+
+
+    # print the message to the stdout and prompt the user for next command/message
+    def print_message(self, message):
+        # deliver message to the application according to the required format
+        formatted_message = " ".join(("in", message.group_name,
+                                      message.username, "says::", message.message_content))
+        sys.stdout.write('\r%s' % formatted_message)
+        # prompt user for next command/message
+        sys.stdout.write('\n[%s] > ' % self.member.username)
+
+
     # send multicast message to selected group
-    def send_message(self, message):
-        curr_group = self.current_group
-        if curr_group is not None:
-            curr_members = curr_group.members_list
-            for mem in curr_members:
-                address = (mem.ip, int(mem.udp_port))
-                formatted_message = " ".join(("in", curr_group.name, self.member.username, "says::", message))
-                self.udp_socket.sendto(formatted_message, address)
+    def send_message(self, message_content):
+        if self.current_group is not None:
+            # update serial number of messages sent by this client
+            self.message_num = self.message_num + 1
+
+            for member in self.current_group.members_list:
+                target_address = (member.ip, int(member.udp_port))
+                # assert that every message sent to other clients should match the following form
+                # <message-number> in <group-name> <username> says:: <message-content>
+                formatted_message = " ".join((str(self.message_num), "in", self.current_group.name,
+                                              self.member.username, "says::", message_content))
+                self.udp_socket.sendto(formatted_message, target_address)
         else:
             print 'No group to send selected. use !w <group name> to choose'
 
 
     # decode user's input and forward to responsible function
-    def decode_and_forward(self, message, server_ip, server_port):
-        if re.match('\s*!lg\s*', message):
-            self.list_groups(server_ip, server_port, message)
-        elif re.match('\s*!lm\s+[\w\d_-]+$\s*', message):
-            self.list_members(server_ip, server_port, message)
-        elif re.match('\s*!j\s+[\w\d_-]+$\s*', message):
-            self.join_group(server_ip, server_port, message)
-        elif re.match('\s*!e\s+[\w\d_-]+$\s*', message):
-            self.exit_group(server_ip, server_port, message)
-        elif re.match('\s*!q\s*', message):
-            self.quit(server_ip, server_port, message)
-        elif re.match('\s*!w\s+[\w\d_-]+$\s*', message):
-            self.select_group(message)
-        elif re.match('\s*[^ !].*', message):
-            self.send_message(message)
+    def decode_and_forward(self, message_content, server_ip, server_port):
+        if re.match('\s*!lg\s*', message_content):
+            self.list_groups(server_ip, server_port, message_content)
+        elif re.match('\s*!lm\s+[\w\d_-]+$\s*', message_content):
+            self.list_members(server_ip, server_port, message_content)
+        elif re.match('\s*!j\s+[\w\d_-]+$\s*', message_content):
+            self.join_group(server_ip, server_port, message_content)
+        elif re.match('\s*!e\s+[\w\d_-]+$\s*', message_content):
+            self.exit_group(server_ip, server_port, message_content)
+        elif re.match('\s*!q\s*', message_content):
+            self.quit(server_ip, server_port, message_content)
+        elif re.match('\s*!w\s+[\w\d_-]+$\s*', message_content):
+            self.select_group(message_content)
+        elif re.match('\s*[^ !].*', message_content):
+            self.send_message(message_content)
         else:
-            print 'invalid command'
+            print 'Invalid command'
 
