@@ -8,30 +8,32 @@ class Metrics:
         self.total_messages_received = total_messages_received
         self.start_time = start_time
         self.end_time = end_time
-        # dictionary with key = <message-id> and value = tuple (<send-time>, <deliver-time)
+        # dictionary with key = <message-id> and value = list [<send-time>, <deliver-time]
         self.latency_list = {}
 
     # calculate throughput by dividing the total messages sent by the time elapsed
     # between the first message and the delivery of the last message
     def calculate_throughput(self):
-        total_elapsed_time = self.end_time - self.start_time
+        total_elapsed_time = (self.end_time - self.start_time)
         if total_elapsed_time != 0:
-            throughput = total_elapsed_time / self.total_messages_sent
+            throughput = self.total_messages_sent / total_elapsed_time
         else:
             throughput = 0
         return throughput
 
-    # calculate system's average latency
+    # calculate system's average latency in milliseconds
     def calculate_avg_latency(self):
         total_latency = 0.0
         for tup in self.latency_list.values():
             latency = tup[1] - tup[0]
             total_latency = total_latency + latency
+        total_latency = total_latency
         if len(self.latency_list) != 0:
             avg_latency = total_latency / len(self.latency_list)
         else:
             avg_latency = 0
-        return avg_latency
+        # return average latency in milliseconds
+        return avg_latency * (10 ** 3)
 
     def print_info(self, output_fd=sys.stdout):
         """
@@ -45,9 +47,9 @@ class Metrics:
         throughput = self.calculate_throughput()
         avg_latency = self.calculate_avg_latency()
         total_messages = self.total_messages_sent + self.total_messages_received
-        output_fd.write('-----Performance analytics -----')
-        output_fd.write('System throughput = %.3f messages/sec' % throughput)
-        output_fd.write('System latency = %.3f ms' % avg_latency)
-        output_fd.write('Messages sent = %d' % self.total_messages_sent)
-        output_fd.write('Messages received = %d' % self.total_messages_received)
-        output_fd.write('Total messages = %d' % total_messages)
+        output_fd.write('-----Performance analytics -----\n')
+        output_fd.write('System throughput = %.2f messages/sec\n' % throughput)
+        output_fd.write('System latency = %.3f ms\n' % avg_latency)
+        output_fd.write('Messages sent = %d\n' % self.total_messages_sent)
+        output_fd.write('Messages received = %d\n' % self.total_messages_received)
+        output_fd.write('Total messages = %d\n' % total_messages)

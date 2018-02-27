@@ -2,7 +2,7 @@ import socket
 import sys
 import re
 import select
-import timeit
+import time
 
 from member import Member
 from group import Group
@@ -183,7 +183,7 @@ class Client:
         self.tcp_socket.close()
         print '\nTerminating messenger application ...\n'
         # store time for last message sent for performance metrics
-        self.metrics.start_time = timeit.default_timer()
+        self.metrics.end_time = time.time()
         # print performance analytics information
         self.metrics.print_info()
         sys.exit(0)
@@ -270,9 +270,11 @@ class Client:
         # we accept the message and deliver it to the application (print to stdout)
         if message.serial_no == last_serial + 1:
             self.print_message(message)
-            # add the delivering time of the message with specific message ID
-            delivering_time = timeit.default_timer()
-            self.metrics.latency_list[message.get_id()][1] = delivering_time
+            # add the delivering time of the message with specific message ID only
+            # if it was sent from this client
+            if message.username == self.member.username:
+                delivering_time = time.time()
+                self.metrics.latency_list[message.get_id()].append(delivering_time)
             self.metrics.total_messages_received += 1
             # increment serial number of this (group,username) tuple's
             self.lamport_dict[tup] = self.lamport_dict[tup] + 1
@@ -285,8 +287,8 @@ class Client:
                             (waiting_msg.serial_no == message.serial_no + 1):
                         self.print_message(waiting_msg)
                         # add the delivering time of the message with specific message ID
-                        delivering_time = timeit.default_timer()
-                        self.metrics.latency_list[waiting_msg.get_id()][1] = delivering_time
+                        delivering_time = time.time()
+                        self.metrics.latency_list[waiting_msg.get_id()].append(delivering_time)
                         self.metrics.total_messages_received += 1
                         self.messages_buffer.remove(waiting_msg)
                         continue
@@ -336,7 +338,7 @@ class Client:
             # if it is the first sent message, then store time to calculate
             # performance metrics
             if self.message_num == 1:
-                self.metrics.start_time = timeit.default_timer()
+                self.metrics.start_time = time.time()
             # send message to all members of the group
             for member in self.current_group.members_list:
                 target_address = (member.ip, int(member.udp_port))
@@ -347,10 +349,10 @@ class Client:
                 # uniquely identify this message by this tuple to calculate metrics for it
                 message_id = (self.current_group.name, self.member.username, self.message_num)
                 # evaluate time that this message was sent
-                start_time = timeit.default_timer()
+                start_time = time.time()
                 self.udp_socket.sendto(formatted_message, target_address)
                 # add the sending time of the message with specific message ID
-                self.metrics.latency_list[message_id] = (start_time, 0.0)
+                self.metrics.latency_list[message_id] = [start_time]
                 self.metrics.total_messages_sent += 1
         else:
             print 'No group to send selected. use !w <group name> to choose'
