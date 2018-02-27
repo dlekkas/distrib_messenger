@@ -2,10 +2,12 @@ import socket
 import sys
 import re
 import select
+import timeit
 
 from member import Member
 from group import Group
 from message import Message
+from metrics import Metrics
 
 
 class Client:
@@ -14,7 +16,9 @@ class Client:
         self.member = Member(None, None, ip, udp_port, tcp_port)
         self.udp_socket = None
         self.tcp_socket = None
+        # dictionary of all groups this client belongs to
         self.group_list = {}
+        # the group client has selected to send messages
         self.current_group = None
         # serial number of message sent by client
         self.message_num = 0
@@ -23,13 +27,21 @@ class Client:
         self.lamport_dict = {}
         # buffer storing messages waiting to be delivered
         self.messages_buffer = []
+        # performance metrics
+        self.metrics = Metrics()
 
 
-    def register(self, server_ip, server_port):
+
+    def register(self, server_ip, server_port, input_fd=sys.stdin):
+        """
+        Register client to the messenger application
+        :param server_ip:   tracker's IP address
+        :param server_port: the port tracker is listening to
+        :param input_fd:    the file descriptor of the input stream (stdin is default)
+        """
         # initialize UDP socket for group messages
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.udp_socket.bind((self.member.ip, self.member.udp_port))
-
         # initialize TCP socket listening for group change notifications from tracker
         self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.tcp_socket.setblocking(0)
@@ -59,23 +71,23 @@ class Client:
                 self.member.username = username
 
         print "Successfully registered to messenger application!"
-        self.run(server_ip, server_port)
+        sys.stdout.write('[%s] > ' % self.member.username)
+        self.run(server_ip, server_port, input_fd)
 
 
 
-    def run(self, server_ip, server_port):
-            sys.stdout.write('[%s] > ' % self.member.username)
+    def run(self, server_ip, server_port, input_fd):
             # loop forever waiting for incoming messages from other clients and waiting for
             # user to submit a message and/or a command from stdin (all those operations
             # are non-blocking due to the use of select() function
             while True:
-                sockets_list = [sys.stdin, self.udp_socket, self.tcp_socket]
+                sockets_list = [input_fd, self.udp_socket, self.tcp_socket]
                 readers, writers, errors = select.select(sockets_list, [], [], 0)
 
                 for sock in readers:
                     # the user has entered a command for the tracker or a message for a group
-                    if sock == sys.stdin:
-                        text = sys.stdin.readline()
+                    if sock == input_fd:
+                        text = input_fd.readline()
                         self.decode_and_forward(text, server_ip, server_port)
                         sys.stdout.write('[%s] > ' % self.member.username)
 
@@ -169,7 +181,11 @@ class Client:
 
         self.udp_socket.close()
         self.tcp_socket.close()
-        print 'Terminating messenger application ...'
+        print '\nTerminating messenger application ...\n'
+        # store time for last message sent for performance metrics
+        self.metrics.start_time = timeit.default_timer()
+        # print performance analytics information
+        self.metrics.print_info()
         sys.exit(0)
 
 
@@ -188,6 +204,7 @@ class Client:
     def send_to_server(self, message, server_ip, server_port):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((server_ip, server_port))
+        self.metrics.total_messages_sent += 1
         s.send(message)
         s.settimeout(5)
         try:
@@ -253,6 +270,10 @@ class Client:
         # we accept the message and deliver it to the application (print to stdout)
         if message.serial_no == last_serial + 1:
             self.print_message(message)
+            # add the delivering time of the message with specific message ID
+            delivering_time = timeit.default_timer()
+            self.metrics.latency_list[message.get_id()][1] = delivering_time
+            self.metrics.total_messages_received += 1
             # increment serial number of this (group,username) tuple's
             self.lamport_dict[tup] = self.lamport_dict[tup] + 1
             # check if there are any messages in the buffer waiting for the recently
@@ -263,6 +284,10 @@ class Client:
                     if ((waiting_msg.username, waiting_msg.group_name) == tup) and \
                             (waiting_msg.serial_no == message.serial_no + 1):
                         self.print_message(waiting_msg)
+                        # add the delivering time of the message with specific message ID
+                        delivering_time = timeit.default_timer()
+                        self.metrics.latency_list[waiting_msg.get_id()][1] = delivering_time
+                        self.metrics.total_messages_received += 1
                         self.messages_buffer.remove(waiting_msg)
                         continue
                 updates_available = False
@@ -308,14 +333,25 @@ class Client:
         if self.current_group is not None:
             # update serial number of messages sent by this client
             self.message_num = self.message_num + 1
-
+            # if it is the first sent message, then store time to calculate
+            # performance metrics
+            if self.message_num == 1:
+                self.metrics.start_time = timeit.default_timer()
+            # send message to all members of the group
             for member in self.current_group.members_list:
                 target_address = (member.ip, int(member.udp_port))
                 # assert that every message sent to other clients should match the following form
                 # <message-number> in <group-name> <username> says:: <message-content>
                 formatted_message = " ".join((str(self.message_num), "in", self.current_group.name,
                                               self.member.username, "says::", message_content))
+                # uniquely identify this message by this tuple to calculate metrics for it
+                message_id = (self.current_group.name, self.member.username, self.message_num)
+                # evaluate time that this message was sent
+                start_time = timeit.default_timer()
                 self.udp_socket.sendto(formatted_message, target_address)
+                # add the sending time of the message with specific message ID
+                self.metrics.latency_list[message_id] = (start_time, 0.0)
+                self.metrics.total_messages_sent += 1
         else:
             print 'No group to send selected. use !w <group name> to choose'
 
@@ -338,4 +374,7 @@ class Client:
             self.send_message(message_content)
         else:
             print 'Invalid command'
+
+
+
 
