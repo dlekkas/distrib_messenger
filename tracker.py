@@ -180,7 +180,9 @@ class Tracker:
         if group_name in self.groups.keys():
             group = self.groups[group_name]
             group.remove_member(member)
-        # TODO - if last member left the group then delete group
+        # if last member left the group then delete group
+        if len(self.groups.keys()) == 1:
+            del self.groups[group_name]
 
 
     # handle the new member registration by creating a new member
