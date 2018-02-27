@@ -3,6 +3,7 @@ import sys
 import re
 import select
 import time
+import random
 
 from member import Member
 from group import Group
@@ -12,8 +13,8 @@ from metrics import Metrics
 
 class Client:
 
-    def __init__(self, ip, tcp_port, udp_port):
-        self.member = Member(None, None, ip, udp_port, tcp_port)
+    def __init__(self, ip, udp_port):
+        self.member = Member(None, None, ip, udp_port, self.generate_random_port())
         self.udp_socket = None
         self.tcp_socket = None
         # dictionary of all groups this client belongs to
@@ -32,12 +33,13 @@ class Client:
 
 
 
-    def register(self, server_ip, server_port, input_fd=sys.stdin):
+    def register(self, server_ip, server_port, input_fd=sys.stdin, username=None):
         """
         Register client to the messenger application
         :param server_ip:   tracker's IP address
         :param server_port: the port tracker is listening to
         :param input_fd:    the file descriptor of the input stream (stdin is default)
+        :param username:    client's username - skips username validation
         """
         # initialize UDP socket for group messages
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -49,12 +51,14 @@ class Client:
         self.tcp_socket.listen(1)
 
         valid_username = False
+
         while not valid_username:
-            # prompt user to enter a username
-            username = raw_input('Enter your username: ')
+            if username is None:
+                username = raw_input('Enter your username: ')
             # check if the username is valid (matches specific regex)
             if re.match("^[a-zA-Z0-9_.-]+$", username) is None:
                 print "Username is invalid, please try again."
+                username = None
                 continue
 
             # generate registration message and send to tracker
@@ -64,6 +68,7 @@ class Client:
             # check if username already exists
             if reply == "username taken":
                 print "Username already exists, please try again."
+                username = None
                 continue
             else:
                 valid_username = True
@@ -377,6 +382,10 @@ class Client:
         else:
             print 'Invalid command'
 
+    # TODO - ensure that port is available
+    # generate random port from 10000-50000
+    def generate_random_port(self):
+        return random.randint(2000, 10000)
 
 
 
