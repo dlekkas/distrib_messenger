@@ -101,7 +101,11 @@ class Client:
             # are non-blocking due to the use of select() function
             while True:
                 sockets_list = [self.input_fd, self.udp_socket, self.tcp_socket]
-                readers, writers, errors = select.select(sockets_list, [], [], 0)
+                try:
+                    readers, writers, errors = select.select(sockets_list, [], [], 0)
+                except KeyboardInterrupt:
+                    self.metrics.print_info()
+                    sys.exit(0)
 
                 # if there are not any messages received from network then deliver
                 # the messages we already have by total ordering
@@ -134,8 +138,7 @@ class Client:
                             if self.lamport_timestamp == 0:
                                 time.sleep(0.5)
                             self.handle_incoming_message_TOTAL(received_msg)
-                        else:
-                            sys.exit(5)
+
 
                     # the TCP socket is listening for server to notify asynchronously that
                     # a member has entered or left a group that the client belongs to
@@ -214,11 +217,8 @@ class Client:
         self.tcp_socket.close()
         print '\nTerminating messenger application ...\n'
 
-        # store time for last message sent for performance metrics
-        self.metrics.end_time = time.time()
         # print performance analytics information
         self.metrics.print_info()
-
         sys.exit(0)
 
 
@@ -373,11 +373,15 @@ class Client:
         sys.stderr.write('\r%s' % formatted_message)
         # prompt user for next command/message
         sys.stderr.write('\n[%s] > ' % self.member.username)
+        # consider each message as it was the last one
+        self.metrics.end_time = time.time()
 
+        '''
         # if it is the last message sent by this client (assuming file with 10 lines ...)
         if message.username == self.member.username and self.message_num == 10:
             self.metrics.end_time = time.time()
             time.sleep(3)
+        '''
 
 
     # send multicast message to selected group
@@ -450,6 +454,9 @@ class Client:
         elif re.match('\s*!w\s+[\w\d_-]+$\s*', message_content):
             self.select_group(message_content)
         elif re.match('\s*[^ !].*', message_content):
+            # ensure that all clients are up and running
+            while len(self.current_group.members_list) != 5:
+                pass
             self.send_message(message_content)
         else:
             print 'Invalid command'
@@ -457,7 +464,7 @@ class Client:
     # TODO - ensure that port is available
     # generate random port from 10000-50000
     def generate_random_port(self):
-        return random.randint(2000, 10000)
+        return random.randint(10000, 50000)
 
 
 

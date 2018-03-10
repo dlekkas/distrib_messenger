@@ -1,30 +1,34 @@
-import getpass
 import random
 import sys
+import socket
 
 from client import Client
 
-SERVER_IP = '127.0.0.1'
+SERVER_HOSTNAME = 'distrib-1'
 SERVER_PORT = 50000
-
-
+MODE = 'FIFO'
 
 
 # generate random port from 10000-50000
 def generate_random_port():
-    return random.randint(2000, 10000)
+    return random.randint(10000, 50000)
 
 
 def main():
-    ip = '127.0.0.1'
+    # automatically set username as the current hostname
+    username = socket.gethostname()
+    # find the local ip based on the hostname
+    client_ip = socket.gethostbyname(username)
+    # generate a random UDP port listening for incoming connections
     port = generate_random_port()
-    client = Client(ip, port)
-    unix_user = getpass.getuser()
-    client = Client(ip, port)
+    # find tracker ip based on its hostname
+    tracker_ip = socket.gethostbyname(SERVER_HOSTNAME)
+
+    client = Client(client_ip, port, MODE)
     if len(sys.argv) == 2:
         input_file = sys.argv[1]
         input_fd = open(input_file, 'r')
-        client.register(SERVER_IP, SERVER_PORT, input_fd, unix_user)
+        client.register(tracker_ip, SERVER_PORT, input_fd, username)
     else:
         print 'Usage: ./demo_test.py <input_file>'
 

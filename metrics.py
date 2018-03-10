@@ -47,7 +47,7 @@ class Metrics:
         throughput = self.calculate_throughput()
         avg_latency = self.calculate_avg_latency()
         total_messages = self.total_messages_sent + self.total_messages_received
-        output_fd.write('-----Performance analytics -----\n')
+        output_fd.write('\n\n-----Performance analytics -----\n')
         output_fd.write('System throughput = %.2f messages/sec\n' % throughput)
         output_fd.write('System latency = %.3f ms\n' % avg_latency)
         output_fd.write('Messages sent = %d\n' % self.total_messages_sent)
