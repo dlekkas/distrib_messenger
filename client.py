@@ -115,6 +115,9 @@ class Client:
                 for sock in readers:
                     # the user has entered a command for the tracker or a message for a group
                     if sock == self.input_fd:
+                        # ensure that all clients are up and running
+                        if self.current_group is not None and len(self.current_group.members_list) != 5:
+                            continue
                         text = self.input_fd.readline()
                         self.decode_and_forward(text)
                         sys.stderr.write('[%s] > ' % self.member.username)
@@ -454,9 +457,6 @@ class Client:
         elif re.match('\s*!w\s+[\w\d_-]+$\s*', message_content):
             self.select_group(message_content)
         elif re.match('\s*[^ !].*', message_content):
-            # ensure that all clients are up and running
-            while len(self.current_group.members_list) != 5:
-                pass
             self.send_message(message_content)
         else:
             print 'Invalid command'
