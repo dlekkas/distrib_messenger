@@ -17,6 +17,9 @@ class Client:
         self.member = Member(None, None, ip, udp_port, self.generate_random_port())
         self.udp_socket = None
         self.tcp_socket = None
+        self.tracker_ip = None
+        self.tracker_port = None
+        self.input_fd = None
         # dictionary of all groups this client belongs to
         self.group_list = {}
         # the group client has selected to send messages
@@ -41,6 +44,10 @@ class Client:
         :param input_fd:    the file descriptor of the input stream (stdin is default)
         :param username:    client's username - skips username validation
         """
+        self.tracker_ip = server_ip
+        self.tracker_port = server_port
+        self.input_fd = input_fd
+        
         # initialize UDP socket for group messages
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.udp_socket.bind((self.member.ip, self.member.udp_port))
@@ -64,7 +71,7 @@ class Client:
             # generate registration message and send to tracker
             formatted_message = "\t".join(("register", self.member.ip, str(self.member.udp_port),
                                            str(self.member.tcp_port), username))
-            reply = self.send_to_server(formatted_message, server_ip, server_port)
+            reply = self.send_to_server(formatted_message)
             # check if username already exists
             if reply == "username taken":
                 print "Username already exists, please try again."
@@ -77,23 +84,23 @@ class Client:
 
         print "Successfully registered to messenger application!"
         sys.stdout.write('[%s] > ' % self.member.username)
-        self.run(server_ip, server_port, input_fd)
+        self.run()
 
 
 
-    def run(self, server_ip, server_port, input_fd):
+    def run(self):
             # loop forever waiting for incoming messages from other clients and waiting for
             # user to submit a message and/or a command from stdin (all those operations
             # are non-blocking due to the use of select() function
             while True:
-                sockets_list = [input_fd, self.udp_socket, self.tcp_socket]
+                sockets_list = [self.input_fd, self.udp_socket, self.tcp_socket]
                 readers, writers, errors = select.select(sockets_list, [], [], 0)
 
                 for sock in readers:
                     # the user has entered a command for the tracker or a message for a group
-                    if sock == input_fd:
-                        text = input_fd.readline()
-                        self.decode_and_forward(text, server_ip, server_port)
+                    if sock == self.input_fd:
+                        text = self.input_fd.readline()
+                        self.decode_and_forward(text)
                         sys.stdout.write('[%s] > ' % self.member.username)
 
                     # the udp socket listening for chat messages has available data to read
@@ -127,28 +134,28 @@ class Client:
 
 
     # list all available groups in the messenger chat
-    def list_groups(self, server_ip, server_port, message):
+    def list_groups(self, message):
         command = message.split()[0]
         formatted_message = "\t".join((str(self.member.id), command))
-        reply = self.send_to_server(formatted_message, server_ip, server_port)
+        reply = self.send_to_server(formatted_message)
         print 'groups: ' + reply
 
 
     # list members of certain group
-    def list_members(self, server_ip, server_port, message):
+    def list_members(self, message):
         command = message.split()[0]
         group_name = message.split()[1]
         formatted_message = "\t".join((str(self.member.id), command, group_name))
-        reply = self.send_to_server(formatted_message, server_ip, server_port)
+        reply = self.send_to_server(formatted_message)
         print 'members: ' + reply
 
 
     # join selected group
-    def join_group(self, server_ip, server_port, message):
+    def join_group(self, message):
         command = message.split()[0]
         group_name = message.split()[1]
         formatted_message = "\t".join((str(self.member.id), command, group_name))
-        reply = self.send_to_server(formatted_message, server_ip, server_port)
+        reply = self.send_to_server(formatted_message)
         multicast_group = Group(group_name)
         members_details = reply.split("\t")
         for m in members_details:
@@ -159,14 +166,14 @@ class Client:
 
 
     # exit selected group.
-    def exit_group(self, server_ip, server_port, message):
+    def exit_group(self, message):
         if not self.group_list:
             print 'No available groups exist.'
         else:
             command = message.split()[0]
             group_name = message.split()[1]
             formatted_message = "\t".join((str(self.member.id), command, group_name))
-            reply = self.send_to_server(formatted_message, server_ip, server_port)
+            reply = self.send_to_server(formatted_message)
             # TODO - error handle a reply different than 'EXIT_GROUP OK'
 
             if group_name in self.group_list.keys():
@@ -177,20 +184,22 @@ class Client:
                 print "You don\'t belong in group '%s'." % group_name
 
 
-    # warn tracker that you quit chat service, free udp port and exit
-    def quit(self, server_ip, server_port, message):
+    # warn tracker that you quit chat service, free udp/tcp port and exit
+    def quit(self, message):
         tokens = message.split()
         formatted_message = "\t".join((str(self.member.id), tokens[0]))
-        reply = self.send_to_server(formatted_message, server_ip, server_port)
+        reply = self.send_to_server(formatted_message)
         # TODO - error handle a reply different than 'QUIT OK'
 
         self.udp_socket.close()
         self.tcp_socket.close()
         print '\nTerminating messenger application ...\n'
+        '''
         # store time for last message sent for performance metrics
         self.metrics.end_time = time.time()
         # print performance analytics information
         self.metrics.print_info()
+        '''
         sys.exit(0)
 
 
@@ -206,9 +215,9 @@ class Client:
 
     # send data to server and return reply. Used in
     # other functions to automate this process
-    def send_to_server(self, message, server_ip, server_port):
+    def send_to_server(self, message):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((server_ip, server_port))
+        s.connect((self.tracker_ip, self.tracker_port))
         self.metrics.total_messages_sent += 1
         s.send(message)
         s.settimeout(5)
@@ -334,16 +343,26 @@ class Client:
         # prompt user for next command/message
         sys.stdout.write('\n[%s] > ' % self.member.username)
 
+        # if it is the last message sent by this client (assuming file with 10 lines ...)
+        if message.username == self.member.username and self.message_num == 10:
+            self.metrics.end_time = time.time()
+            time.sleep(3)
+
 
     # send multicast message to selected group
     def send_message(self, message_content):
         if self.current_group is not None:
             # update serial number of messages sent by this client
             self.message_num = self.message_num + 1
+
+
             # if it is the first sent message, then store time to calculate
             # performance metrics
             if self.message_num == 1:
+                time.sleep(3)  # sleep to ensure that other clients are up and running
                 self.metrics.start_time = time.time()
+
+
             # send message to all members of the group
             for member in self.current_group.members_list:
                 target_address = (member.ip, int(member.udp_port))
@@ -364,17 +383,17 @@ class Client:
 
 
     # decode user's input and forward to responsible function
-    def decode_and_forward(self, message_content, server_ip, server_port):
+    def decode_and_forward(self, message_content):
         if re.match('\s*!lg\s*', message_content):
-            self.list_groups(server_ip, server_port, message_content)
+            self.list_groups(message_content)
         elif re.match('\s*!lm\s+[\w\d_-]+$\s*', message_content):
-            self.list_members(server_ip, server_port, message_content)
+            self.list_members(message_content)
         elif re.match('\s*!j\s+[\w\d_-]+$\s*', message_content):
-            self.join_group(server_ip, server_port, message_content)
+            self.join_group(message_content)
         elif re.match('\s*!e\s+[\w\d_-]+$\s*', message_content):
-            self.exit_group(server_ip, server_port, message_content)
+            self.exit_group(message_content)
         elif re.match('\s*!q\s*', message_content):
-            self.quit(server_ip, server_port, message_content)
+            self.quit(message_content)
         elif re.match('\s*!w\s+[\w\d_-]+$\s*', message_content):
             self.select_group(message_content)
         elif re.match('\s*[^ !].*', message_content):
