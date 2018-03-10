@@ -19,6 +19,6 @@ tcp_port = generate_random_port()
 udp_port = generate_random_port()
 username = generate_random_username()
 
-user = Client(user_ip, tcp_port, udp_port)
-print 'Client [IP=%s, TCP_PORT=%s, UDP_PORT=%s] ' % (user_ip, tcp_port, udp_port)
+user = Client(user_ip, udp_port, mode='TOTAL_ORDER')
+print 'Client [IP=%s, UDP_PORT=%s] ' % (user_ip, udp_port)
 user.register(user_ip, TRACKER_PORT)

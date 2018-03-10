@@ -22,6 +22,12 @@ class Group:
             if member.username == username:
                 self.members_list.remove(member)
 
+    # returns the ID of a specific member of the group (given its username)
+    def find_member_id(self, username):
+        for member in self.members_list:
+            if member.username == username:
+                return member.id
+
     # list all the active members of the group
     def list_members(self):
         if not self.members_list:

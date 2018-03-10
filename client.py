@@ -13,13 +13,18 @@ from metrics import Metrics
 
 class Client:
 
-    def __init__(self, ip, udp_port):
+    def __init__(self, ip, udp_port, mode='FIFO'):
         self.member = Member(None, None, ip, udp_port, self.generate_random_port())
         self.udp_socket = None
         self.tcp_socket = None
         self.tracker_ip = None
         self.tracker_port = None
         self.input_fd = None
+        if (mode != 'FIFO') and (mode != 'TOTAL_ORDER'):
+            print 'Unsupported message ordering mode'
+            sys.exit(3)
+        else:
+            self.mode = mode
         # dictionary of all groups this client belongs to
         self.group_list = {}
         # the group client has selected to send messages
@@ -31,6 +36,8 @@ class Client:
         self.lamport_dict = {}
         # buffer storing messages waiting to be delivered
         self.messages_buffer = []
+        # lamport timestamp to support total ordering operation mode
+        self.lamport_timestamp = 0
         # performance metrics
         self.metrics = Metrics()
 
@@ -82,8 +89,8 @@ class Client:
                 self.member.id = reply
                 self.member.username = username
 
-        print "Successfully registered to messenger application!"
-        sys.stdout.write('[%s] > ' % self.member.username)
+        print 'Successfully registered to messenger application!'
+        sys.stderr.write('[%s] > ' % self.member.username)
         self.run()
 
 
@@ -96,12 +103,17 @@ class Client:
                 sockets_list = [self.input_fd, self.udp_socket, self.tcp_socket]
                 readers, writers, errors = select.select(sockets_list, [], [], 0)
 
+                # if there are not any messages received from network then deliver
+                # the messages we already have by total ordering
+                if (not readers) and self.mode == 'TOTAL_ORDER':
+                    self.deliver_messages_TOTAL()
+
                 for sock in readers:
                     # the user has entered a command for the tracker or a message for a group
                     if sock == self.input_fd:
                         text = self.input_fd.readline()
                         self.decode_and_forward(text)
-                        sys.stdout.write('[%s] > ' % self.member.username)
+                        sys.stderr.write('[%s] > ' % self.member.username)
 
                     # the udp socket listening for chat messages has available data to read
                     # so a member from the groups the user belongs to, has written a message
@@ -114,9 +126,16 @@ class Client:
                             print "Timeout Happened"
                             sock.shutdown(socket.SHUT_RDWR)
                             sock.close()
-                            sys.exit(0)
-                        self.handle_incoming_message(received_msg)
-
+                            sys.exit(1)
+                        if self.mode == 'FIFO':
+                            self.handle_incoming_message_FIFO(received_msg)
+                        elif self.mode == 'TOTAL_ORDER':
+                            # if it is the first message sleep for 500 ms
+                            if self.lamport_timestamp == 0:
+                                time.sleep(0.5)
+                            self.handle_incoming_message_TOTAL(received_msg)
+                        else:
+                            sys.exit(5)
 
                     # the TCP socket is listening for server to notify asynchronously that
                     # a member has entered or left a group that the client belongs to
@@ -194,12 +213,12 @@ class Client:
         self.udp_socket.close()
         self.tcp_socket.close()
         print '\nTerminating messenger application ...\n'
-        '''
+
         # store time for last message sent for performance metrics
         self.metrics.end_time = time.time()
         # print performance analytics information
         self.metrics.print_info()
-        '''
+
         sys.exit(0)
 
 
@@ -263,7 +282,7 @@ class Client:
     # unless it ensures FIFO ordering, if the message should not be
     # delivered then it is stored in the associated buffer according to
     # its group
-    def handle_incoming_message(self, received_msg):
+    def handle_incoming_message_FIFO(self, received_msg):
         # each message received should be in the following form
         # <message-number> in <group-name> <username> says:: <message-content>
         message = self.parse_incoming_message(received_msg)
@@ -319,6 +338,18 @@ class Client:
             sys.stderr.write('A message is rejected due to smaller serial_no than expected')
 
 
+    def handle_incoming_message_TOTAL(self, received_msg):
+        # each message received should be in the following form
+        # <message-number> in <group-name> <username> says:: <message-content>
+        message = self.parse_incoming_message(received_msg)
+
+        # for every receiving message, we update our local lamport timestamp
+        self.lamport_timestamp = max(self.lamport_timestamp, message.serial_no) + 1
+
+        # add the receiving message to buffer until we start delivering messages
+        self.messages_buffer.append(message)
+
+
 
     # parse incoming message to extract important information
     # in order to implement a message ordering scheme
@@ -339,9 +370,9 @@ class Client:
         # deliver message to the application according to the required format
         formatted_message = " ".join(("in", message.group_name,
                                       message.username, "says::", message.message_content))
-        sys.stdout.write('\r%s' % formatted_message)
+        sys.stderr.write('\r%s' % formatted_message)
         # prompt user for next command/message
-        sys.stdout.write('\n[%s] > ' % self.member.username)
+        sys.stderr.write('\n[%s] > ' % self.member.username)
 
         # if it is the last message sent by this client (assuming file with 10 lines ...)
         if message.username == self.member.username and self.message_num == 10:
@@ -366,12 +397,18 @@ class Client:
             # send message to all members of the group
             for member in self.current_group.members_list:
                 target_address = (member.ip, int(member.udp_port))
+
+                if self.mode == 'FIFO':
+                    msg_timestamp = self.message_num
+                elif self.mode == 'TOTAL_ORDER':
+                    msg_timestamp = self.lamport_timestamp
+
                 # assert that every message sent to other clients should match the following form
-                # <message-number> in <group-name> <username> says:: <message-content>
-                formatted_message = " ".join((str(self.message_num), "in", self.current_group.name,
+                # <message-timestamp> in <group-name> <username> says:: <message-content>
+                formatted_message = " ".join((str(msg_timestamp), "in", self.current_group.name,
                                               self.member.username, "says::", message_content))
                 # uniquely identify this message by this tuple to calculate metrics for it
-                message_id = (self.current_group.name, self.member.username, self.message_num)
+                message_id = (self.current_group.name, self.member.username, msg_timestamp)
                 # evaluate time that this message was sent
                 start_time = time.time()
                 self.udp_socket.sendto(formatted_message, target_address)
@@ -380,6 +417,22 @@ class Client:
                 self.metrics.total_messages_sent += 1
         else:
             print 'No group to send selected. use !w <group name> to choose'
+
+
+    def deliver_messages_TOTAL(self):
+        # sorts the messages by implementing total ordering, we deliver Ti
+        # iff for every j ((Ti < Tj) or (Ti = Tj and username_i < username_j))
+        if self.messages_buffer:
+            self.messages_buffer.sort(key=lambda x: (-x.serial_no, x.username))
+        for msg in self.messages_buffer:
+            self.print_message(msg)
+            if msg.username == self.member.username:
+                # add the delivering time of the message with specific message ID
+                delivering_time = time.time()
+                # store performance metrics
+                self.metrics.latency_list[msg.get_id()].append(delivering_time)
+                self.metrics.total_messages_received += 1
+            self.messages_buffer.remove(msg)
 
 
     # decode user's input and forward to responsible function
