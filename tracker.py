@@ -1,6 +1,7 @@
 import socket
 import select
 import logging
+import time
 
 from group import Group
 from member import Member
@@ -44,8 +45,14 @@ class Tracker:
 
         logging.info('Chat server started listening on port ' + str(self.port))
 
+        last_failed_check = time.time()
         while True:
-            readers, writers, errors = select.select(self.sockets_list, [], [])
+            if time.time() - last_failed_check > 7:
+                self.remove_failed_users()
+                last_failed_check = time.time()
+
+            # wait for time completion
+            readers, writers, errors = select.select(self.sockets_list, [], [], 0)
             for sock in readers:
                 # new connection established
                 if sock == self.socket:
@@ -53,6 +60,21 @@ class Tracker:
                 # command issued by member
                 else:
                     self.handle_request(sock)
+
+
+    def remove_failed_users(self):
+        del_list = []
+        for mem in self.members_dict:
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.connect((self.members_dict[mem].ip, int(self.members_dict[mem].tcp_port)))
+                sock.close()
+            except socket.error:
+                del_list.append(self.members_dict[mem])
+
+        for mem in del_list:
+            print 'client with username: ' + mem.username + ' disconnected'
+            self.member_quit(mem)
 
 
     def serve_client(self):
