@@ -241,7 +241,7 @@ class Tracker:
         logging.debug('TCP connection with client [' + str(addr) + '] terminated successfully.')
 
 
-server = Tracker(host="127.0.0.1", port=50000)
+server = Tracker(host="10.0.1.6", port=50000)
 server.connect()
 
 

@@ -119,6 +119,9 @@ class Client:
                         if self.current_group is not None and len(self.current_group.members_list) != 5:
                             continue
                         text = self.input_fd.readline()
+                        if text == "":
+                            sockets_list.remove(self.input_fd)
+                            continue
                         self.decode_and_forward(text)
                         sys.stderr.write('[%s] > ' % self.member.username)
 
