@@ -444,6 +444,7 @@ class Client:
 
     # decode user's input and forward to responsible function
     def decode_and_forward(self, message_content):
+
         if re.match('\s*!lg\s*', message_content):
             self.list_groups(message_content)
         elif re.match('\s*!lm\s+[\w\d_-]+$\s*', message_content):
@@ -456,10 +457,14 @@ class Client:
             self.quit(message_content)
         elif re.match('\s*!w\s+[\w\d_-]+$\s*', message_content):
             self.select_group(message_content)
+        else:
+            self.send_message(message_content)
+        '''
         elif re.match('\s*[^ !].*', message_content):
             self.send_message(message_content)
         else:
             print 'Invalid command'
+        '''
 
     # TODO - ensure that port is available
     # generate random port from 10000-50000
