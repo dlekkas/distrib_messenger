@@ -432,14 +432,14 @@ class Client:
         # iff for every j ((Ti < Tj) or (Ti = Tj and username_i < username_j))
         if self.messages_buffer:
             self.messages_buffer.sort(key=lambda x: (-x.serial_no, x.username))
-        for msg in self.messages_buffer:
+        for msg in reversed(self.messages_buffer):
             self.print_message(msg)
             if msg.username == self.member.username:
                 # add the delivering time of the message with specific message ID
                 delivering_time = time.time()
                 # store performance metrics
                 self.metrics.latency_list[msg.get_id()].append(delivering_time)
-                self.metrics.total_messages_received += 1
+            self.metrics.total_messages_received += 1
         self.messages_buffer = []
 
 
