@@ -124,6 +124,8 @@ class Client:
                             continue
                         self.decode_and_forward(text)
                         sys.stderr.write('[%s] > ' % self.member.username)
+                        if self.mode == 'TOTAL_ORDER':
+                            break
 
                     # the udp socket listening for chat messages has available data to read
                     # so a member from the groups the user belongs to, has written a message
