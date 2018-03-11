@@ -99,8 +99,8 @@ class Client:
             # loop forever waiting for incoming messages from other clients and waiting for
             # user to submit a message and/or a command from stdin (all those operations
             # are non-blocking due to the use of select() function
+            sockets_list = [self.input_fd, self.udp_socket, self.tcp_socket]
             while True:
-                sockets_list = [self.input_fd, self.udp_socket, self.tcp_socket]
                 try:
                     readers, writers, errors = select.select(sockets_list, [], [], 0)
                 except KeyboardInterrupt:
@@ -140,9 +140,11 @@ class Client:
                         if self.mode == 'FIFO':
                             self.handle_incoming_message_FIFO(received_msg)
                         elif self.mode == 'TOTAL_ORDER':
+                            '''
                             # if it is the first message sleep for 500 ms
                             if self.lamport_timestamp == 0:
                                 time.sleep(0.5)
+                            '''
                             self.handle_incoming_message_TOTAL(received_msg)
 
 
@@ -382,13 +384,6 @@ class Client:
         # consider each message as it was the last one
         self.metrics.end_time = time.time()
 
-        '''
-        # if it is the last message sent by this client (assuming file with 10 lines ...)
-        if message.username == self.member.username and self.message_num == 10:
-            self.metrics.end_time = time.time()
-            time.sleep(3)
-        '''
-
 
     # send multicast message to selected group
     def send_message(self, message_content):
@@ -400,7 +395,6 @@ class Client:
             # if it is the first sent message, then store time to calculate
             # performance metrics
             if self.message_num == 1:
-                time.sleep(3)  # sleep to ensure that other clients are up and running
                 self.metrics.start_time = time.time()
 
 
@@ -442,7 +436,8 @@ class Client:
                 # store performance metrics
                 self.metrics.latency_list[msg.get_id()].append(delivering_time)
                 self.metrics.total_messages_received += 1
-            self.messages_buffer.remove(msg)
+        self.messages_buffer = []
+
 
 
     # decode user's input and forward to responsible function
