@@ -102,6 +102,7 @@ class Client:
             sockets_list = [self.input_fd, self.udp_socket, self.tcp_socket]
             counter=0
             while True:
+                counter = counter + 1
                 try:
                     readers, writers, errors = select.select(sockets_list, [], [], 0)
                 except KeyboardInterrupt:
