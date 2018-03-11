@@ -111,9 +111,7 @@ class Client:
                 # the messages we already have by total ordering
 
                 if (not readers) and self.mode == 'TOTAL_ORDER':
-                    print len(self.messages_buffer)
                     self.deliver_messages_TOTAL()
-
 
                 # prioritize input from user over requests from others
                 if self.input_fd in readers and self.mode == 'TOTAL_ORDER':
