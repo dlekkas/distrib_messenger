@@ -112,6 +112,10 @@ class Client:
                 if (not readers) and self.mode == 'TOTAL_ORDER':
                     self.deliver_messages_TOTAL()
 
+                # prioritize input from user over requests from others
+                if self.input_fd in readers and self.mode == 'TOTAL_ORDER':
+                    readers = [self.input_fd]
+
                 for sock in readers:
                     # the user has entered a command for the tracker or a message for a group
                     if sock == self.input_fd:
@@ -124,8 +128,6 @@ class Client:
                             continue
                         self.decode_and_forward(text)
                         sys.stderr.write('[%s] > ' % self.member.username)
-                        if self.mode == 'TOTAL_ORDER':
-                            break
 
                     # the udp socket listening for chat messages has available data to read
                     # so a member from the groups the user belongs to, has written a message
