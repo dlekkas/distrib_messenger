@@ -6,7 +6,7 @@ from client import Client
 
 SERVER_HOSTNAME = 'distrib-1'
 SERVER_PORT = 50000
-MODE = 'FIFO'
+MODE = 'TOTAL_ORDER'
 
 
 # generate random port from 10000-50000

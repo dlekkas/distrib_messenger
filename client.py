@@ -109,10 +109,11 @@ class Client:
 
                 # if there are not any messages received from network then deliver
                 # the messages we already have by total ordering
-                '''
+
                 if (not readers) and self.mode == 'TOTAL_ORDER':
+                    print len(self.messages_buffer)
                     self.deliver_messages_TOTAL()
-                '''
+
 
                 # prioritize input from user over requests from others
                 if self.input_fd in readers and self.mode == 'TOTAL_ORDER':
@@ -127,7 +128,6 @@ class Client:
                         text = self.input_fd.readline()
                         if text == "":
                             sockets_list.remove(self.input_fd)
-                            self.deliver_messages_TOTAL()
                             continue
                         self.decode_and_forward(text)
                         sys.stderr.write('[%s] > ' % self.member.username)
