@@ -120,6 +120,8 @@ class Client:
                 '''
 
                 for sock in readers:
+                    if self.mode == 'TOTAL_ORDER':
+                        time.sleep(0.1)
                     # the user has entered a command for the tracker or a message for a group
                     if sock == self.input_fd:
                         # ensure that all clients are up and running
@@ -147,9 +149,6 @@ class Client:
                         if self.mode == 'FIFO':
                             self.handle_incoming_message_FIFO(received_msg)
                         elif self.mode == 'TOTAL_ORDER':
-                            # if it is the first message sleep for 500 ms
-                            if self.lamport_timestamp == 0:
-                                time.sleep(0.8)
                             self.handle_incoming_message_TOTAL(received_msg)
 
 
