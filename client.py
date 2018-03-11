@@ -140,11 +140,9 @@ class Client:
                         if self.mode == 'FIFO':
                             self.handle_incoming_message_FIFO(received_msg)
                         elif self.mode == 'TOTAL_ORDER':
-                            '''
                             # if it is the first message sleep for 500 ms
                             if self.lamport_timestamp == 0:
                                 time.sleep(0.5)
-                            '''
                             self.handle_incoming_message_TOTAL(received_msg)
 
 
