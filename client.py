@@ -114,8 +114,10 @@ class Client:
                     self.deliver_messages_TOTAL()
 
                 # prioritize input from user over requests from others
+                '''
                 if self.input_fd in readers and self.mode == 'TOTAL_ORDER':
                     readers = [self.input_fd]
+                '''
 
                 for sock in readers:
                     # the user has entered a command for the tracker or a message for a group
@@ -146,8 +148,10 @@ class Client:
                             self.handle_incoming_message_FIFO(received_msg)
                         elif self.mode == 'TOTAL_ORDER':
                             # if it is the first message sleep for 500 ms
+                            '''
                             if self.lamport_timestamp == 0:
                                 time.sleep(0.5)
+                            '''
                             self.handle_incoming_message_TOTAL(received_msg)
 
 
