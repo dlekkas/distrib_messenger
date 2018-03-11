@@ -116,8 +116,8 @@ class Client:
 
                 for sock in readers:
                     counter=0
-                    if self.mode == 'TOTAL_ORDER':
-                        #time.sleep(0.001)
+                    # if self.mode == 'TOTAL_ORDER':
+                        # time.sleep(0.001)
                     # the user has entered a command for the tracker or a message for a group
                     if sock == self.input_fd:
                         # ensure that all clients are up and running
