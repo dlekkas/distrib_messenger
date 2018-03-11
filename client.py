@@ -100,6 +100,7 @@ class Client:
             # user to submit a message and/or a command from stdin (all those operations
             # are non-blocking due to the use of select() function
             sockets_list = [self.input_fd, self.udp_socket, self.tcp_socket]
+            counter=0
             while True:
                 try:
                     readers, writers, errors = select.select(sockets_list, [], [], 0)
@@ -110,18 +111,13 @@ class Client:
                 # if there are not any messages received from network then deliver
                 # the messages we already have by total ordering
 
-                if (not readers) and self.mode == 'TOTAL_ORDER':
+                if counter>1000 and (not readers) and self.mode == 'TOTAL_ORDER':
                     self.deliver_messages_TOTAL()
 
-                # prioritize input from user over requests from others
-                '''
-                if self.input_fd in readers and self.mode == 'TOTAL_ORDER':
-                    readers = [self.input_fd]
-                '''
-
                 for sock in readers:
+                    counter=0
                     if self.mode == 'TOTAL_ORDER':
-                        time.sleep(0.001)
+                        #time.sleep(0.001)
                     # the user has entered a command for the tracker or a message for a group
                     if sock == self.input_fd:
                         # ensure that all clients are up and running
