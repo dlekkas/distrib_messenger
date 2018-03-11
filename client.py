@@ -112,7 +112,7 @@ class Client:
                 # if there are not any messages received from network then deliver
                 # the messages we already have by total ordering
 
-                if counter>1000 and (not readers) and self.mode == 'TOTAL_ORDER':
+                if counter>500 and (not readers) and self.mode == 'TOTAL_ORDER':
                     self.deliver_messages_TOTAL()
 
                 for sock in readers:
