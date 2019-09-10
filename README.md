@@ -46,10 +46,16 @@ Specifically, the system logs whenever a client exits the application the follow
 Finally, tracker performs health monitoring to  ensure system's stability with health checks. Those checks are implemented using heartbeats sent to each registered client. Failure of a client to respond to the heartbeat means his automatic de-registration of any group he belonged. A client to recover such failure would need to join again each group he belonged to.
 
 ## Usage
-Firstly, host the tracker somewhere (by default it assumes localhost):
-`python2 tracker.py`
+Firstly, host the tracker somewhere (by default it assumes localhost):  
 
-Second, connect a client and follow the prompts of the application:
-`python2 demo.py`
+
+`python2 tracker.py`   
+
+
+Second, connect a client and follow the prompts of the application:   
+
+
+`python2 demo.py`   
+
 
 Third, distribute to your friends and enjoy!
